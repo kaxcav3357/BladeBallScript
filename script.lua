@@ -1,121 +1,114 @@
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+-- Script do Painel com todas as funcionalidades (versão 2.0)
+
+local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
 
 local isAutoParryEnabled = false
+local isAggressiveParryEnabled = false
+local isParrySpamEnabled = false
 local isAutoFarmEnabled = false
 local isFlyEnabled = false
 local isSpeedEnabled = false
-local ballToParry = nil
 local flyVelocity = nil
-local lastParryTime = 0
-local parryCooldown = 0.5 -- 0.5 segundos de cooldown entre os parries para evitar travamento
 
-local function createGUI()
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+local lastParryTime = 0
+local parryCooldown = 0.3 -- Cooldown para evitar travamento
+
+local isSpamming = false
+local spamTask = nil
+
+-- ===[ GUI SETUP ]===
+local screenGui
+local function createGui()
+    screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "BladeBallProGUI_DAN"
+    screenGui.Parent = CoreGui
+    screenGui.ResetOnSpawn = false
+    screenGui.Enabled = true
 
     local mainFrame = Instance.new("Frame")
+    mainFrame.Name = "MainFrame"
     mainFrame.Size = UDim2.new(0, 200, 0, 250)
-    mainFrame.Position = UDim2.new(0.5, -100, 0.5, -125)
-    mainFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    mainFrame.BorderSizePixel = 2
-    mainFrame.BorderColor3 = Color3.fromRGB(20, 20, 20)
+    mainFrame.Position = UDim2.new(1, -210, 0.1, 0)
+    mainFrame.BackgroundColor3 = Color3.new(0.15, 0.15, 0.15)
+    mainFrame.BorderSizePixel = 1
+    mainFrame.BorderColor3 = Color3.new(0.05, 0.05, 0.05)
+    mainFrame.Draggable = true
     mainFrame.Parent = screenGui
 
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Size = UDim2.new(1, 0, 0, 20)
-    titleLabel.Position = UDim2.new(0, 0, 0, 0)
-    titleLabel.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    titleLabel.Text = "DAN's Blade Ball Hub"
-    titleLabel.TextColor3 = Color3.new(1, 1, 1)
-    titleLabel.Font = Enum.Font.SourceSans
-    titleLabel.TextSize = 16
-    titleLabel.Parent = mainFrame
+    local titleBar = Instance.new("TextLabel")
+    titleBar.Size = UDim2.new(1, 0, 0, 20)
+    titleBar.Position = UDim2.new(0, 0, 0, 0)
+    titleBar.Font = Enum.Font.SourceSansBold
+    titleBar.TextSize = 16
+    titleBar.Text = "Blade Ball DAN Edition"
+    titleBar.TextColor3 = Color3.new(1, 1, 1)
+    titleBar.BackgroundColor3 = Color3.new(0.25, 0.25, 0.25)
+    titleBar.Parent = mainFrame
     
-    local dragging
-    local dragStart
-    local dragInput
-    
-    titleLabel.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            dragInput = input
-        end
-    end)
-    
-    titleLabel.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = false
-        end
-    end)
-    
-    game:GetService("UserInputService").InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            local newPos = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset + delta.X,
-                                      mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset + delta.Y)
-            mainFrame.Position = newPos
-            dragStart = input.Position
-        end
-    end)
+    local paddingFrame = Instance.new("Frame")
+    paddingFrame.Size = UDim2.new(1, -10, 1, -20)
+    paddingFrame.Position = UDim2.new(0, 5, 0, 25)
+    paddingFrame.BackgroundTransparency = 1
+    paddingFrame.Parent = mainFrame
 
-    -- Botão para o Auto Parry
-    local autoParryButton = Instance.new("TextButton")
-    autoParryButton.Size = UDim2.new(1, -20, 0, 30)
-    autoParryButton.Position = UDim2.new(0, 10, 0, 30)
-    autoParryButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    autoParryButton.Text = "Auto Parry: OFF"
-    autoParryButton.TextColor3 = Color3.new(1, 1, 1)
-    autoParryButton.Font = Enum.Font.SourceSans
-    autoParryButton.TextSize = 14
-    autoParryButton.Parent = mainFrame
-    
-    autoParryButton.MouseButton1Click:Connect(function()
-        isAutoParryEnabled = not isAutoParryEnabled
-        if isAutoParryEnabled then
-            autoParryButton.Text = "Auto Parry: ON"
-            autoParryButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-        else
-            autoParryButton.Text = "Auto Parry: OFF"
-            autoParryButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-        end
-    end)
+    local layout = Instance.new("UIListLayout")
+    layout.FillDirection = Enum.FillDirection.Vertical
+    layout.Padding = UDim.new(0, 5)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout.Parent = paddingFrame
 
-    -- Botão para o Auto Farm
-    local autoFarmButton = Instance.new("TextButton")
-    autoFarmButton.Size = UDim2.new(1, -20, 0, 30)
-    autoFarmButton.Position = UDim2.new(0, 10, 0, 70)
-    autoFarmButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    autoFarmButton.Text = "Auto Farm: OFF"
-    autoFarmButton.TextColor3 = Color3.new(1, 1, 1)
-    autoFarmButton.Font = Enum.Font.SourceSans
-    autoFarmButton.TextSize = 14
-    autoFarmButton.Parent = mainFrame
-    
-    autoFarmButton.MouseButton1Click:Connect(function()
-        isAutoFarmEnabled = not isAutoFarmEnabled
-        if isAutoFarmEnabled then
-            autoFarmButton.Text = "Auto Farm: ON"
-            autoFarmButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-        else
-            autoFarmButton.Text = "Auto Farm: OFF"
-            autoFarmButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-        end
-    end)
+    local function createToggle(name, stateKey, textOn, textOff)
+        local button = Instance.new("TextButton")
+        button.Name = name .. "Toggle"
+        button.Size = UDim2.new(1, 0, 0, 25)
+        button.Font = Enum.Font.SourceSansBold
+        button.TextSize = 15
+        button.TextColor3 = Color3.new(1, 1, 1)
+        button.BorderSizePixel = 0
+        button.Parent = paddingFrame
 
+        local function updateButton()
+            button.Text = name .. " (" .. (enabled[stateKey] and textOn or textOff) .. ")"
+            button.BackgroundColor3 = enabled[stateKey] and Color3.new(0, 0.6, 0) or Color3.new(0.4, 0.4, 0.4)
+        end
+
+        button.MouseButton1Click:Connect(function()
+            enabled[stateKey] = not enabled[stateKey]
+            updateButton()
+        end)
+        
+        updateButton()
+        return button
+    end
+    
+    local enabled = {
+        Parry = false,
+        AggressiveParry = false,
+        SpamParry = false,
+        Aim = false,
+        Walk = false
+    }
+
+    createToggle("Auto Parry", "Parry", "ON", "OFF")
+    createToggle("Aggressive Parry", "AggressiveParry", "ON", "OFF")
+    createToggle("Parry Spam", "SpamParry", "ON", "OFF")
+    createToggle("Auto Walk", "Walk", "ON", "OFF")
+    
     -- Botão para o Fly
     local flyButton = Instance.new("TextButton")
-    flyButton.Size = UDim2.new(1, -20, 0, 30)
-    flyButton.Position = UDim2.new(0, 10, 0, 110)
+    flyButton.Size = UDim2.new(1, 0, 0, 25)
+    flyButton.Position = UDim2.new(0, 0, 0, 150)
     flyButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
     flyButton.Text = "Fly: OFF"
     flyButton.TextColor3 = Color3.new(1, 1, 1)
     flyButton.Font = Enum.Font.SourceSans
     flyButton.TextSize = 14
-    flyButton.Parent = mainFrame
+    flyButton.Parent = paddingFrame
     
     flyButton.MouseButton1Click:Connect(function()
         isFlyEnabled = not isFlyEnabled
@@ -130,14 +123,14 @@ local function createGUI()
 
     -- Botão para o Speed
     local speedButton = Instance.new("TextButton")
-    speedButton.Size = UDim2.new(1, -20, 0, 30)
-    speedButton.Position = UDim2.new(0, 10, 0, 150)
+    speedButton.Size = UDim2.new(1, 0, 0, 25)
+    speedButton.Position = UDim2.new(0, 0, 0, 180)
     speedButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
     speedButton.Text = "Speed: OFF"
     speedButton.TextColor3 = Color3.new(1, 1, 1)
     speedButton.Font = Enum.Font.SourceSans
     speedButton.TextSize = 14
-    speedButton.Parent = mainFrame
+    speedButton.Parent = paddingFrame
     
     speedButton.MouseButton1Click:Connect(function()
         isSpeedEnabled = not isSpeedEnabled
@@ -150,97 +143,173 @@ local function createGUI()
         end
     end)
     
-    return mainFrame
-end
-
-local function mainLoop()
-    while true do
-        local character = LocalPlayer.Character
-        if not character or not character:FindFirstChild("HumanoidRootPart") or not character:FindFirstChild("Humanoid") then
-            task.wait()
-            continue
-        end
-
-        local rootPart = character.HumanoidRootPart
-        local humanoid = character.Humanoid
-
-        if isAutoParryEnabled and (os.clock() - lastParryTime) > parryCooldown then
-            for _, v in pairs(Workspace:GetChildren()) do
-                if v.Name == "Ball" and v:FindFirstChild("BodyVelocity") then
-                    local playerPosition = rootPart.Position
-                    local ballPosition = v.Position
-                    
-                    if (playerPosition - ballPosition).magnitude < 15 and v.BodyVelocity.Velocity.magnitude > 50 then
-                        if ballToParry ~= v then
-                            local remoteEvent = ReplicatedStorage:WaitForChild("ParryEvent")
-                            remoteEvent:FireServer()
-                            lastParryTime = os.clock()
-                            ballToParry = v
-                            break
-                        end
-                    end
-                else
-                    ballToParry = nil
-                end
-            end
-        end
-
+    -- Botão para o Auto Farm
+    local autoFarmButton = Instance.new("TextButton")
+    autoFarmButton.Size = UDim2.new(1, 0, 0, 25)
+    autoFarmButton.Position = UDim2.new(0, 0, 0, 210)
+    autoFarmButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+    autoFarmButton.Text = "Auto Farm: OFF"
+    autoFarmButton.TextColor3 = Color3.new(1, 1, 1)
+    autoFarmButton.Font = Enum.Font.SourceSans
+    autoFarmButton.TextSize = 14
+    autoFarmButton.Parent = paddingFrame
+    
+    autoFarmButton.MouseButton1Click:Connect(function()
+        isAutoFarmEnabled = not isAutoFarmEnabled
         if isAutoFarmEnabled then
-            if Workspace:FindFirstChild("Ball") then
-                local ball = Workspace:FindFirstChild("Ball")
-                if ball and ball:FindFirstChild("BodyVelocity") then
-                    local ballPosition = ball.Position
-                    local directionToBall = (rootPart.Position - ballPosition).unit
-                    local farmPosition = ballPosition + (directionToBall * 15)
-                    
-                    if not rootPart:FindFirstChild("BodyPosition") then
-                        local bodyPosition = Instance.new("BodyPosition")
-                        bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                        bodyPosition.D = 100
-                        bodyPosition.P = 10000
-                        bodyPosition.Parent = rootPart
-                    end
-                    rootPart.BodyPosition.Position = farmPosition
-                end
-            end
+            autoFarmButton.Text = "Auto Farm: ON"
+            autoFarmButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
         else
-            if rootPart:FindFirstChild("BodyPosition") then
-                rootPart:FindFirstChild("BodyPosition"):Destroy()
-            end
+            autoFarmButton.Text = "Auto Farm: OFF"
+            autoFarmButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
         end
-
-        if isFlyEnabled then
-            humanoid.PlatformStand = true
-            
-            if not flyVelocity then
-                flyVelocity = Instance.new("BodyVelocity")
-                flyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-                flyVelocity.Velocity = Vector3.new(0, 0, 0)
-                flyVelocity.Parent = rootPart
-            end
-            
-            local move = game:GetService("UserInputService"):GetMouseDelta()
-            local moveVector = Vector3.new(move.X, 0, move.Y)
-            flyVelocity.Velocity = (rootPart.CFrame.rightVector * moveVector.X * 50) + (rootPart.CFrame.lookVector * moveVector.Z * 50)
-        else
-            if humanoid.PlatformStand then
-                humanoid.PlatformStand = false
-            end
-            if flyVelocity then
-                flyVelocity:Destroy()
-                flyVelocity = nil
-            end
-        end
-        
-        if isSpeedEnabled then
-            humanoid.WalkSpeed = 50
-        else
-            humanoid.WalkSpeed = 16
-        end
-
-        task.wait()
-    end
+    end)
 end
 
-createGUI()
-task.spawn(mainLoop)
+-- ===[ CORE LOGIC ]===
+local function GetBallFromFolder(folder)
+    for _, ball in ipairs(folder:GetChildren()) do
+        if ball:GetAttribute("realBall") then
+            return ball
+        end
+    end
+    return nil
+end
+
+local function StartSpammingClicks()
+    if isSpamming then return end
+    isSpamming = true
+    task.spawn(function()
+        while isSpamming do
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+            task.wait(0.03) -- Intervalo de spam
+        end
+    end)
+end
+
+local function StopSpammingClicks()
+    isSpamming = false
+end
+
+-- Main Loop
+RunService.PreSimulation:Connect(function()
+    local player = Players.LocalPlayer
+    local character = player.Character
+    if not character or not character:FindFirstChild("HumanoidRootPart") or not character:FindFirstChild("Humanoid") then
+        StopSpammingClicks()
+        return
+    end
+
+    local hrp = character.HumanoidRootPart
+    local humanoid = character.Humanoid
+    
+    local ballFolder = workspace:FindFirstChild("Balls")
+    if not ballFolder then
+        ballFolder = workspace:FindFirstChild("TrainingBalls")
+    end
+    
+    if not ballFolder then
+        StopSpammingClicks()
+        return
+    end
+
+    local ball = GetBallFromFolder(ballFolder)
+    
+    if not ball then
+        StopSpammingClicks()
+        -- Auto Farm
+        if hrp:FindFirstChild("BodyPosition") then
+            hrp:FindFirstChild("BodyPosition"):Destroy()
+        end
+        return
+    end
+
+    local distance = (hrp.Position - ball.Position).Magnitude
+    local ballTarget = ball:GetAttribute("target")
+    local ballParried = ball:GetAttribute("parried")
+    local speed = ball.zoomies.VectorVelocity.Magnitude
+
+    -- Lógica do Auto Farm
+    if isAutoFarmEnabled then
+        local directionToBall = (hrp.Position - ball.Position).unit
+        local farmPosition = ball.Position + (directionToBall * 15)
+        
+        if not hrp:FindFirstChild("BodyPosition") then
+            local bodyPosition = Instance.new("BodyPosition")
+            bodyPosition.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            bodyPosition.D = 100
+            bodyPosition.P = 10000
+            bodyPosition.Parent = hrp
+        end
+        hrp.BodyPosition.Position = farmPosition
+    else
+        if hrp:FindFirstChild("BodyPosition") then
+            hrp:FindFirstChild("BodyPosition"):Destroy()
+        end
+    end
+
+    -- Lógica do Fly
+    if isFlyEnabled then
+        humanoid.PlatformStand = true
+        if not flyVelocity then
+            flyVelocity = Instance.new("BodyVelocity")
+            flyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            flyVelocity.Velocity = Vector3.new(0, 0, 0)
+            flyVelocity.Parent = hrp
+        end
+        local move = UserInputService:GetMouseDelta()
+        local moveVector = Vector3.new(move.X, 0, move.Y)
+        flyVelocity.Velocity = (hrp.CFrame.rightVector * moveVector.X * 50) + (hrp.CFrame.lookVector * moveVector.Z * 50)
+    else
+        if humanoid.PlatformStand then
+            humanoid.PlatformStand = false
+        end
+        if flyVelocity then
+            flyVelocity:Destroy()
+            flyVelocity = nil
+        end
+    end
+    
+    -- Lógica do Speed
+    if isSpeedEnabled then
+        humanoid.WalkSpeed = 50
+    else
+        humanoid.WalkSpeed = 16
+    end
+    
+    -- Nova lógica do Auto Parry
+    if isAutoParryEnabled and ballTarget == player.Name and not ballParried and speed > 0 and (os.clock() - lastParryTime) > parryCooldown then
+        if isParrySpamEnabled then
+            if distance <= 40 then
+                StartSpammingClicks()
+            else
+                StopSpammingClicks()
+            end
+        elseif isAggressiveParryEnabled then
+            StopSpammingClicks()
+            local adjustedDistanceLimit = 35
+            if speed > 70 then
+                adjustedDistanceLimit = 35 * (speed / 70)
+            end
+            
+            if distance <= adjustedDistanceLimit then
+                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                lastParryTime = os.clock()
+                ball:SetAttribute("parried", true)
+            end
+        else
+            StopSpammingClicks()
+            -- Lógica preditiva (simplificada)
+            local predictedTime = distance / speed
+            if predictedTime <= 0.55 then
+                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                lastParryTime = os.clock()
+                ball:SetAttribute("parried", true)
+            end
+        end
+    else
+        StopSpammingClicks()
+    end
+end)
+
+createGui()
