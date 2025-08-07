@@ -1,4 +1,4 @@
--- Script do Painel com todas as funcionalidades (versão 2.0)
+-- Script do Painel com todas as funcionalidades (versão 2.1 - Corrigida)
 
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
@@ -16,7 +16,7 @@ local isSpeedEnabled = false
 local flyVelocity = nil
 
 local lastParryTime = 0
-local parryCooldown = 0.3 -- Cooldown para evitar travamento
+local parryCooldown = 0.3
 
 local isSpamming = false
 local spamTask = nil
@@ -62,7 +62,7 @@ local function createGui()
     layout.SortOrder = Enum.SortOrder.LayoutOrder
     layout.Parent = paddingFrame
 
-    local function createToggle(name, stateKey, textOn, textOff)
+    local function createToggle(name, stateVar, stateOnText, stateOffText)
         local button = Instance.new("TextButton")
         button.Name = name .. "Toggle"
         button.Size = UDim2.new(1, 0, 0, 25)
@@ -73,12 +73,13 @@ local function createGui()
         button.Parent = paddingFrame
 
         local function updateButton()
-            button.Text = name .. " (" .. (enabled[stateKey] and textOn or textOff) .. ")"
-            button.BackgroundColor3 = enabled[stateKey] and Color3.new(0, 0.6, 0) or Color3.new(0.4, 0.4, 0.4)
+            local enabled = _G[stateVar]
+            button.Text = name .. " (" .. (enabled and stateOnText or stateOffText) .. ")"
+            button.BackgroundColor3 = enabled and Color3.new(0, 0.6, 0) or Color3.new(0.4, 0.4, 0.4)
         end
 
         button.MouseButton1Click:Connect(function()
-            enabled[stateKey] = not enabled[stateKey]
+            _G[stateVar] = not _G[stateVar]
             updateButton()
         end)
         
@@ -86,84 +87,13 @@ local function createGui()
         return button
     end
     
-    local enabled = {
-        Parry = false,
-        AggressiveParry = false,
-        SpamParry = false,
-        Aim = false,
-        Walk = false
-    }
-
-    createToggle("Auto Parry", "Parry", "ON", "OFF")
-    createToggle("Aggressive Parry", "AggressiveParry", "ON", "OFF")
-    createToggle("Parry Spam", "SpamParry", "ON", "OFF")
-    createToggle("Auto Walk", "Walk", "ON", "OFF")
-    
-    -- Botão para o Fly
-    local flyButton = Instance.new("TextButton")
-    flyButton.Size = UDim2.new(1, 0, 0, 25)
-    flyButton.Position = UDim2.new(0, 0, 0, 150)
-    flyButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    flyButton.Text = "Fly: OFF"
-    flyButton.TextColor3 = Color3.new(1, 1, 1)
-    flyButton.Font = Enum.Font.SourceSans
-    flyButton.TextSize = 14
-    flyButton.Parent = paddingFrame
-    
-    flyButton.MouseButton1Click:Connect(function()
-        isFlyEnabled = not isFlyEnabled
-        if isFlyEnabled then
-            flyButton.Text = "Fly: ON"
-            flyButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-        else
-            flyButton.Text = "Fly: OFF"
-            flyButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-        end
-    end)
-
-    -- Botão para o Speed
-    local speedButton = Instance.new("TextButton")
-    speedButton.Size = UDim2.new(1, 0, 0, 25)
-    speedButton.Position = UDim2.new(0, 0, 0, 180)
-    speedButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    speedButton.Text = "Speed: OFF"
-    speedButton.TextColor3 = Color3.new(1, 1, 1)
-    speedButton.Font = Enum.Font.SourceSans
-    speedButton.TextSize = 14
-    speedButton.Parent = paddingFrame
-    
-    speedButton.MouseButton1Click:Connect(function()
-        isSpeedEnabled = not isSpeedEnabled
-        if isSpeedEnabled then
-            speedButton.Text = "Speed: ON"
-            speedButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-        else
-            speedButton.Text = "Speed: OFF"
-            speedButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-        end
-    end)
-    
-    -- Botão para o Auto Farm
-    local autoFarmButton = Instance.new("TextButton")
-    autoFarmButton.Size = UDim2.new(1, 0, 0, 25)
-    autoFarmButton.Position = UDim2.new(0, 0, 0, 210)
-    autoFarmButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-    autoFarmButton.Text = "Auto Farm: OFF"
-    autoFarmButton.TextColor3 = Color3.new(1, 1, 1)
-    autoFarmButton.Font = Enum.Font.SourceSans
-    autoFarmButton.TextSize = 14
-    autoFarmButton.Parent = paddingFrame
-    
-    autoFarmButton.MouseButton1Click:Connect(function()
-        isAutoFarmEnabled = not isAutoFarmEnabled
-        if isAutoFarmEnabled then
-            autoFarmButton.Text = "Auto Farm: ON"
-            autoFarmButton.BackgroundColor3 = Color3.fromRGB(0, 150, 0)
-        else
-            autoFarmButton.Text = "Auto Farm: OFF"
-            autoFarmButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-        end
-    end)
+    -- Agora todos os botões são criados de forma correta e consistente
+    createToggle("Auto Parry", "isAutoParryEnabled", "ON", "OFF")
+    createToggle("Aggressive Parry", "isAggressiveParryEnabled", "ON", "OFF")
+    createToggle("Parry Spam", "isParrySpamEnabled", "ON", "OFF")
+    createToggle("Auto Farm", "isAutoFarmEnabled", "ON", "OFF")
+    createToggle("Fly", "isFlyEnabled", "ON", "OFF")
+    createToggle("Speed", "isSpeedEnabled", "ON", "OFF")
 end
 
 -- ===[ CORE LOGIC ]===
@@ -182,7 +112,7 @@ local function StartSpammingClicks()
     task.spawn(function()
         while isSpamming do
             VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-            task.wait(0.03) -- Intervalo de spam
+            task.wait(0.03)
         end
     end)
 end
@@ -191,7 +121,6 @@ local function StopSpammingClicks()
     isSpamming = false
 end
 
--- Main Loop
 RunService.PreSimulation:Connect(function()
     local player = Players.LocalPlayer
     local character = player.Character
@@ -210,6 +139,9 @@ RunService.PreSimulation:Connect(function()
     
     if not ballFolder then
         StopSpammingClicks()
+        if hrp:FindFirstChild("BodyPosition") then
+            hrp:FindFirstChild("BodyPosition"):Destroy()
+        end
         return
     end
 
@@ -217,7 +149,6 @@ RunService.PreSimulation:Connect(function()
     
     if not ball then
         StopSpammingClicks()
-        -- Auto Farm
         if hrp:FindFirstChild("BodyPosition") then
             hrp:FindFirstChild("BodyPosition"):Destroy()
         end
@@ -229,7 +160,6 @@ RunService.PreSimulation:Connect(function()
     local ballParried = ball:GetAttribute("parried")
     local speed = ball.zoomies.VectorVelocity.Magnitude
 
-    -- Lógica do Auto Farm
     if isAutoFarmEnabled then
         local directionToBall = (hrp.Position - ball.Position).unit
         local farmPosition = ball.Position + (directionToBall * 15)
@@ -248,7 +178,6 @@ RunService.PreSimulation:Connect(function()
         end
     end
 
-    -- Lógica do Fly
     if isFlyEnabled then
         humanoid.PlatformStand = true
         if not flyVelocity then
@@ -270,14 +199,12 @@ RunService.PreSimulation:Connect(function()
         end
     end
     
-    -- Lógica do Speed
     if isSpeedEnabled then
         humanoid.WalkSpeed = 50
     else
         humanoid.WalkSpeed = 16
     end
     
-    -- Nova lógica do Auto Parry
     if isAutoParryEnabled and ballTarget == player.Name and not ballParried and speed > 0 and (os.clock() - lastParryTime) > parryCooldown then
         if isParrySpamEnabled then
             if distance <= 40 then
@@ -299,7 +226,6 @@ RunService.PreSimulation:Connect(function()
             end
         else
             StopSpammingClicks()
-            -- Lógica preditiva (simplificada)
             local predictedTime = distance / speed
             if predictedTime <= 0.55 then
                 VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
