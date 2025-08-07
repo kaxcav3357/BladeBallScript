@@ -1,5 +1,3 @@
--- Script do Painel com todas as funcionalidades (versão 2.1 - Corrigida)
-
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
@@ -97,13 +95,23 @@ local function createGui()
 end
 
 -- ===[ CORE LOGIC ]===
-local function GetBallFromFolder(folder)
-    for _, ball in ipairs(folder:GetChildren()) do
-        if ball:GetAttribute("realBall") then
-            return ball
+local function getNearestBall()
+    local nearestBall = nil
+    local shortestDistance = math.huge
+    local ballFolder = workspace:FindFirstChild("Balls") or workspace:FindFirstChild("TrainingBalls")
+    
+    if ballFolder then
+        for _, ball in ipairs(ballFolder:GetChildren()) do
+            if ball:IsA("Part") and ball:GetAttribute("realBall") then
+                local distance = (game.Players.LocalPlayer.Character.HumanoidRootPart.Position - ball.Position).Magnitude
+                if distance < shortestDistance then
+                    shortestDistance = distance
+                    nearestBall = ball
+                end
+            end
         end
     end
-    return nil
+    return nearestBall, shortestDistance
 end
 
 local function StartSpammingClicks()
@@ -132,20 +140,7 @@ RunService.PreSimulation:Connect(function()
     local hrp = character.HumanoidRootPart
     local humanoid = character.Humanoid
     
-    local ballFolder = workspace:FindFirstChild("Balls")
-    if not ballFolder then
-        ballFolder = workspace:FindFirstChild("TrainingBalls")
-    end
-    
-    if not ballFolder then
-        StopSpammingClicks()
-        if hrp:FindFirstChild("BodyPosition") then
-            hrp:FindFirstChild("BodyPosition"):Destroy()
-        end
-        return
-    end
-
-    local ball = GetBallFromFolder(ballFolder)
+    local ball, distance = getNearestBall()
     
     if not ball then
         StopSpammingClicks()
@@ -155,11 +150,10 @@ RunService.PreSimulation:Connect(function()
         return
     end
 
-    local distance = (hrp.Position - ball.Position).Magnitude
     local ballTarget = ball:GetAttribute("target")
     local ballParried = ball:GetAttribute("parried")
     local speed = ball.zoomies.VectorVelocity.Magnitude
-
+    
     if isAutoFarmEnabled then
         local directionToBall = (hrp.Position - ball.Position).unit
         local farmPosition = ball.Position + (directionToBall * 15)
@@ -226,11 +220,11 @@ RunService.PreSimulation:Connect(function()
             end
         else
             StopSpammingClicks()
-            local predictedTime = distance / speed
-            if predictedTime <= 0.55 then
-                VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-                lastParryTime = os.clock()
-                ball:SetAttribute("parried", true)
+            if ball.Velocity.Magnitude > 0 and ball:GetAttribute("target") == Players.LocalPlayer.Name then
+                local predictedTime = distance / ball.Velocity.Magnitude
+                if predictedTime <= 0.6 then
+                    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                end
             end
         end
     else
